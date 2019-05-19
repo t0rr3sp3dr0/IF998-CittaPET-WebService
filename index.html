@@ -1,14 +1,136 @@
+<!DOCTYPE html>
 <html>
-    <script language="javascript">
-        var source = new EventSource("http://localhost:8081");
-        source.onmessage = function(event) {
-            document.getElementById("result").innerHTML = "<h3> " + event.data + "</h3>";
-        };
-    </script>
-    <body>
 
-    <form>
-        <div id="result"></result>
-    </form>
-    </body>
+<head>
+    <style>
+        /* Set the size of the div element that contains the map */
+        #map {
+            height: 960px;
+            /* The height is 400 pixels */
+            width: 100%;
+            /* The width is the width of the web page */
+        }
+    </style>
+</head>
+
+<body>
+    <h3>CittaPET</h3>
+    <h5 id="dist"></h5>
+    <br>
+    <select>
+        <option>NONE</option>
+        <option disabled></option>
+    </select>
+    <br>
+    <input id="address" type="text" style="width: 720px"></input>
+    <!--The div element for the map -->
+    <div id="map"></div>
+    <script>
+        // Initialize and add the map
+        function initMap() {
+            // The location of Uluru
+            var uluru = { lat: -8.0421643, lng: -34.9386354 };
+            // The map, centered at Uluru
+            var map = new google.maps.Map(
+                document.getElementById('map'), { zoom: 16, center: uluru });
+            // The marker, positioned at Uluru
+            var marker = new google.maps.Marker({ position: uluru, map: map });
+
+            const autocomplete = new google.maps.places.Autocomplete(document.querySelector('#address'));
+            google.maps.event.addListener(autocomplete, 'place_changed', () => {
+                const place = autocomplete.getPlace();
+                console.log(place.geometry.location);
+                marker.setPosition({
+                    lat: place.geometry.location.lat(),
+                    lng: place.geometry.location.lng(),
+                });
+            });
+
+            var hashtable = {};
+
+            const select = document.querySelector('select');
+            fetch('/unitList')
+                .then(res => res.json())
+                .then(body => {
+                    let s = '';
+                    body.forEach(e => {
+                        s += '<option>' + e + '</option>';
+                    })
+                    select.innerHTML += s;
+                });
+
+            let bus;
+            select.addEventListener('change', e => {
+                console.log(e);
+                bus = e.target.value;
+            });
+
+            const dist = document.querySelector('#dist');
+
+            var source = new EventSource("/busesLocation");
+            source.onmessage = function (event) {
+                eval(event.data).forEach(element => {
+                    const unit = element.unit;
+                    if (Object.keys(hashtable).indexOf(unit) == -1) {
+                        hashtable[unit] = new google.maps.Marker({
+                            animation: google.maps.Animation.DROP,
+                            label: unit,
+                            map: map,
+                            position: uluru,
+                        });
+                    }
+
+                    const coordinate = element.coordinate;
+                    hashtable[unit].setPosition({
+                        lat: coordinate.latitude,
+                        lng: coordinate.longitude,
+                    });
+
+                    hashtable[unit].setVisible(!bus || bus == 'NONE' || unit == bus);
+
+                    if (bus) {
+                        dist.display = undefined;
+                        if (unit == bus) {
+                            const diff = distance(marker.position.lat(), marker.position.lng(), hashtable[unit].position.lat(), hashtable[unit].position.lng());
+                            dist.innerText = diff;
+                            dist.style.color = diff <= 1 ? 'red' : 'black';
+                        }
+                    } else
+                        dist.display = 'none';
+                });
+                // document.getElementById("result").innerHTML += event.data + "<br>";
+            };
+        }
+
+        function distance(lat1, lon1, lat2, lon2) {
+            if ((lat1 == lat2) && (lon1 == lon2)) {
+                return 0;
+            }
+            else {
+                var radlat1 = Math.PI * lat1 / 180;
+                var radlat2 = Math.PI * lat2 / 180;
+                var theta = lon1 - lon2;
+                var radtheta = Math.PI * theta / 180;
+                var dist = Math.sin(radlat1) * Math.sin(radlat2) + Math.cos(radlat1) * Math.cos(radlat2) * Math.cos(radtheta);
+                if (dist > 1) {
+                    dist = 1;
+                }
+                dist = Math.acos(dist);
+                dist = dist * 180 / Math.PI;
+                dist = dist * 60 * 1.1515;
+                dist = dist * 1.609344;
+                return dist;
+            }
+        }
+    </script>
+    <!--Load the API from the specified URL
+    * The async attribute allows the browser to render the page while the API loads
+    * The key parameter will contain your own API key (which is not needed for this tutorial)
+    * The callback parameter executes the initMap() function
+    -->
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCgUpVxR3gTzpzTkmoR3b7KnKmkhiJAD5o&callback=initMap&libraries=places">
+        </script>
+</body>
+
 </html>
